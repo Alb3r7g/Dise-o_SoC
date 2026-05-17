@@ -125,11 +125,15 @@ void LCD_Put_Str(char * str){
 	for( int16_t i = 0; i < 16 && str[ i ] != 0; i++ ) LCD_Put_Char( str[ i ] );
 }
 
-void LCD_Put_Num(int16_t num){
-	int16_t p; int16_t f = 0; int8_t ch[ 5 ];
-	for( int16_t i = 0; i < 5; i++ ){
+void LCD_Put_Num(int32_t num){
+	if (num < 0) {
+		LCD_Put_Char('-');
+		num = -num;
+	}
+	int32_t p; int32_t f = 0; int8_t ch[ 5 ];
+	for( int32_t i = 0; i < 5; i++ ){
 		p = 1;
-		for( int16_t j = 4 - i; j > 0; j-- ) p = p * 10;
+		for( int32_t j = 4 - i; j > 0; j-- ) p = p * 10;
 		ch[ i ] = ( num / p );
 		if( num >= p && !f ) f = 1;
 		num = num - ch[ i ] * p;

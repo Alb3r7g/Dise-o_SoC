@@ -15,8 +15,9 @@ void USER_USART2_Init(void) {
     GPIOA->CRL |= GPIO_CRL_CNF3_0;
 
     // Set baud rate to 115200
-    // Asumiendo que APB1 = 32 MHz (mitad de 64MHz)
-    USART2->BRR = 32000000 / 115200;
+    // APB1 = 32 MHz. USARTDIV = 32000000/(16*115200) = 17.361
+    // Mantisa=17(0x11), Fracción=0.361*16=5.78≈6 -> BRR = 0x0116
+    USART2->BRR = 0x0116;
 
     // Enable USART2, Transmitter, Receiver
     USART2->CR1 = USART_CR1_UE | USART_CR1_TE | USART_CR1_RE;

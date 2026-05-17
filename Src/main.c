@@ -28,60 +28,89 @@ int main(void) {
     // Iniciar el ADC
     ADC1->CR2 |= ADC_CR2_ADON;
 
+    // --- TEST DIRECTO DE UART (sin printf) ---
+    // Si el ESP32 recibe "TEST_UART_OK", el hardware está bien
+    const char *test_msg = "TEST_UART_OK\r\n";
+    for (int i = 0; test_msg[i] != '\0'; i++) {
+        while (!(USART2->SR & USART_SR_TXE));
+        USART2->DR = test_msg[i];
+    }
+
+    static uint8_t lcd_counter = 0;
+
     while (1) {
-        // Comenzar conversión
-        ADC1->CR2 |= (0x1UL << 22U); // SWSTART
-        dataADC = USER_ADC_Read();
-
-        // Mapear ADC (0-4095) a Aceleración Throttle (0.0 - 100.0)
-        EngTrModel_U.Throttle = ((double)dataADC / 4095.0) * 100.0;
-
-        // Leer Freno (PC13) - Asumiendo Pull-Up (Lógica negativa al presionar)
-        if (!(GPIOC->IDR & GPIO_IDR_IDR13)) {
-            EngTrModel_U.BrakeTorque = 100.0;
-        } else {
-            EngTrModel_U.BrakeTorque = 0.0;
-        }
-
         // Ejecución cada 40 ms
         if (flag_40ms) {
             flag_40ms = 0;
 
-            // Avanzar el paso del modelo
+            // --- Leer Sensores (síncrono con el modelo) ---
+            ADC1->CR2 |= (0x1UL << 22U); // SWSTART
+            dataADC = USER_ADC_Read();
+            EngTrModel_U.Throttle = ((double)dataADC / 4095.0) * 100.0;
+
+            // Leer Freno (PC13) - Pull-Up (Lógica negativa al presionar)
+            if (!(GPIOC->IDR & GPIO_IDR_IDR13)) {
+                EngTrModel_U.BrakeTorque = 15000.0; // Torque de frenado fuerte
+            } else {
+                EngTrModel_U.BrakeTorque = 0.0;
+            }
+
+            // --- Avanzar el paso del modelo ---
             EngTrModel_step();
 
-            // Escalar Velocidad (VehicleSpeed) para los PWM de los LEDs
+            // --- Controlador de Ralentí (Idle) ---
+            // Evita que el motor caiga por debajo de 800 RPM y que el vehículo retroceda
+            if (EngTrModel_DW.DiscreteTimeIntegrator_DSTATE < 100.0) {
+                EngTrModel_DW.DiscreteTimeIntegrator_DSTATE = 100.0;
+            }
+            if (EngTrModel_DW.WheelSpeed_DSTATE < 0.0) {
+                EngTrModel_DW.WheelSpeed_DSTATE = 0.0;
+            }
+
+            // Topar la velocidad del vehículo a 120 mph
+            if (EngTrModel_Y.VehicleSpeed > 120.0) {
+                EngTrModel_Y.VehicleSpeed = 120.0;
+            }
+
+            // --- Escalar Velocidad para PWM de LEDs ---
             double v_speed = EngTrModel_Y.VehicleSpeed;
             if (v_speed < 0.0) v_speed = 0.0;
-            
-            // Asumiendo velocidad entre 0-100 para rango 0-4095
-            uint32_t ccr_val = (uint32_t)(v_speed * 40.95);
+
+            // Velocidad entre 0-120 mph para rango 0-4095
+            uint32_t ccr_val = (uint32_t)(v_speed * (4095.0 / 120.0));
             if (ccr_val > 4095) ccr_val = 4095;
 
-            // Aplicar PWM
+            // Aplicar PWM a los 4 canales
             TIM3->CCR1 = ccr_val;
             TIM3->CCR2 = ccr_val;
             TIM3->CCR3 = ccr_val;
             TIM3->CCR4 = ccr_val;
 
-            // Actualizar LCD (Velocidad Vehículo y Marcha en Línea 1, RPM en Línea 2)
-            LCD_Set_Cursor(1, 1);
-            LCD_Put_Str("V:");
-            LCD_Put_Num((int)EngTrModel_Y.VehicleSpeed);
-            LCD_Put_Str(" G:");
-            LCD_Put_Num((int)EngTrModel_Y.Gear);
-            LCD_Put_Str("   ");
+            // --- Actualizar LCD cada 200 ms (cada 5 ticks de 40 ms) ---
+            lcd_counter++;
+            if (lcd_counter >= 5) {
+                lcd_counter = 0;
+                char lcd_buf[17];
 
-            LCD_Set_Cursor(2, 1);
-            LCD_Put_Str("RPM:");
-            LCD_Put_Num((int)EngTrModel_Y.EngineSpeed);
-            LCD_Put_Str("   ");
+                // Línea 1: A:<Throttle> V:<VehicleSpeed> G:<Gear>
+                LCD_Set_Cursor(1, 1);
+                sprintf(lcd_buf, "A:%-3d V:%-3d G:%-1d", 
+                        (int)EngTrModel_U.Throttle, 
+                        (int)EngTrModel_Y.VehicleSpeed, 
+                        (int)EngTrModel_Y.Gear);
+                LCD_Put_Str(lcd_buf);
 
-            // Transmitir por UART
-            printf("V: %.2f RPM: %.2f Gear: %.0f\r\n", 
-                    EngTrModel_Y.VehicleSpeed, 
-                    EngTrModel_Y.EngineSpeed, 
-                    EngTrModel_Y.Gear);
+                // Línea 2: RPM:<EngineSpeed>
+                LCD_Set_Cursor(2, 1);
+                sprintf(lcd_buf, "RPM:%-4d        ", (int)EngTrModel_Y.EngineSpeed);
+                LCD_Put_Str(lcd_buf);
+            }
+
+            // --- Transmitir por UART al ESP32 (cada 40 ms) ---
+            printf("%.0f,%.2f,%.0f\r\n",
+                EngTrModel_Y.EngineSpeed,
+                EngTrModel_Y.VehicleSpeed,
+                EngTrModel_Y.Gear);
         }
     }
 }
