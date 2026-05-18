@@ -28,12 +28,11 @@ int main(void) {
     // Iniciar el ADC
     ADC1->CR2 |= ADC_CR2_ADON;
 
-    // --- TEST DIRECTO DE UART (sin printf) ---
-    // Si el ESP32 recibe "TEST_UART_OK", el hardware está bien
-    const char *test_msg = "TEST_UART_OK\r\n";
+    // --- TEST DIRECTO DE UART ---
+    const char *test_msg = "TEST_UART1_OK\r\n";
     for (int i = 0; test_msg[i] != '\0'; i++) {
-        while (!(USART2->SR & USART_SR_TXE));
-        USART2->DR = test_msg[i];
+        while (!(USART1->SR & USART_SR_TXE));
+        USART1->DR = test_msg[i];
     }
 
     static uint8_t lcd_counter = 0;
@@ -106,11 +105,21 @@ int main(void) {
                 LCD_Put_Str(lcd_buf);
             }
 
-            // --- Transmitir por UART al ESP32 (cada 40 ms) ---
-            printf("%.0f,%.2f,%.0f\r\n",
-                EngTrModel_Y.EngineSpeed,
-                EngTrModel_Y.VehicleSpeed,
-                EngTrModel_Y.Gear);
+            // --- Transmitir por UART1 al ESP32 (cada 40 ms) ---
+            {
+                char uart_buf[32];
+                int rpm   = (int)EngTrModel_Y.EngineSpeed;
+                int vel   = (int)(EngTrModel_Y.VehicleSpeed * 100.0);
+                int gear  = (int)EngTrModel_Y.Gear;
+                int vel_i = vel / 100;
+                int vel_d = vel % 100;
+                int n = sprintf(uart_buf, "%d,%d.%02d,%d\r\n", rpm, vel_i, vel_d, gear);
+                for (int i = 0; i < n; i++) {
+                    while (!(USART1->SR & USART_SR_TXE));
+                    USART1->DR = (uint8_t)uart_buf[i];
+                }
+            }
+
         }
     }
 }

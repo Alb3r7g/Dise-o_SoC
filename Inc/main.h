@@ -122,6 +122,7 @@ typedef struct {
 #define ADC1_BASE      0x40012400UL
 #define TIM2_BASE      0x40000000UL
 #define TIM3_BASE      0x40000400UL
+#define USART1_BASE    0x40013800UL
 #define USART2_BASE    0x40004400UL
 #define NVIC_BASE      0xE000E100UL
 
@@ -135,6 +136,7 @@ typedef struct {
 #define ADC1           ((ADC_TypeDef*) ADC1_BASE)
 #define TIM2           ((TIM_TypeDef*) TIM2_BASE)
 #define TIM3           ((TIM_TypeDef*) TIM3_BASE)
+#define USART1         ((USART_TypeDef*) USART1_BASE)
 #define USART2         ((USART_TypeDef*) USART2_BASE)
 #define NVIC           ((NVIC_Type*) NVIC_BASE)
 
@@ -144,6 +146,7 @@ typedef struct {
 #define RCC_APB2ENR_IOPBEN     (0x1UL << 3U)
 #define RCC_APB2ENR_IOPCEN     (0x1UL << 4U)
 #define RCC_APB2ENR_ADC1EN     (0x1UL << 9U)
+#define RCC_APB2ENR_USART1EN   (0x1UL << 14U)
 #define RCC_APB2ENR_AFIOEN     (0x1UL << 0U)
 #define RCC_APB1ENR_TIM2EN     (0x1UL << 0U)
 #define RCC_APB1ENR_TIM3EN     (0x1UL << 1U)
@@ -167,6 +170,20 @@ typedef struct {
 #define GPIO_CRL_MODE3         (0x3UL << 12U)
 #define GPIO_CRL_CNF3          (0x3UL << 14U)
 #define GPIO_CRL_CNF3_0        (0x1UL << 14U)
+
+#define GPIO_CRH_MODE9         (0x3UL << 4U)
+#define GPIO_CRH_MODE9_0       (0x1UL << 4U)
+#define GPIO_CRH_MODE9_1       (0x1UL << 5U)
+#define GPIO_CRH_CNF9          (0x3UL << 6U)
+#define GPIO_CRH_CNF9_0        (0x1UL << 6U)
+#define GPIO_CRH_CNF9_1        (0x1UL << 7U)
+
+#define GPIO_CRH_MODE10        (0x3UL << 8U)
+#define GPIO_CRH_MODE10_0      (0x1UL << 8U)
+#define GPIO_CRH_MODE10_1      (0x1UL << 9U)
+#define GPIO_CRH_CNF10         (0x3UL << 10U)
+#define GPIO_CRH_CNF10_0       (0x1UL << 10U)
+#define GPIO_CRH_CNF10_1       (0x1UL << 11U)
 
 #define GPIO_CRH_MODE13        (0x3UL << 20U)
 #define GPIO_CRH_CNF13         (0x3UL << 22U)
