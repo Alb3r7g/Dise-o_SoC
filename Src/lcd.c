@@ -2,12 +2,8 @@
 #include "main.h"
 #include "lcd.h"
 
-/**
- * --- NUEVO: IMPLEMENTACIÓN DE DELAYS ---
- * Calibrados para una frecuencia de reloj de 64 MHz.
- */
+
 void delay_us(uint32_t us) {
-    // Multiplicador aumentado para asegurar tiempos mínimos del LCD
     volatile uint32_t count = us * 20; 
     while(count--);
 }
@@ -18,7 +14,6 @@ void delay_ms(uint32_t ms) {
     }
 }
 
-// Wrappers para compatibilidad con código de profesor
 void USER_TIM2_Delay_40ms(void) { delay_ms(45); } 
 void USER_TIM_Delay_4_1ms(void) { delay_ms(5); }  
 void USER_TIM_Delay_53us(void)  { delay_us(60); } 
@@ -26,11 +21,6 @@ void USER_TIM_Delay_100us(void) { delay_us(100); }
 void USER_TIM_Delay_10us(void)  { delay_us(10); }
 void USER_TIM_Delay_1ms(void)   { delay_ms(1); }
 
-/**
- * --- NUEVO: FUNCIONES DEL LCD ---
- */
-
-// Fuente de ejemplo (opcional)
 const int8_t UserFont[8][8] =
 {
 		{ 0x11, 0x0A, 0x04, 0x1B, 0x11, 0x11, 0x11, 0x0E },
@@ -99,7 +89,6 @@ void LCD_Write_Byte(uint8_t val){
 	LCD_Pulse_EN( );
 	LCD_Out_Data4( val & 0x0FU );
 	LCD_Pulse_EN( );
-	// En modo seguro usamos un delay fijo en lugar de consultar si está ocupado
 	delay_ms(2); 
 }
 

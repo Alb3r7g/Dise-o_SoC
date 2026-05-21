@@ -9,13 +9,13 @@ volatile uint8_t flag_40ms = 0;
 int main(void) {
     uint16_t dataADC;
 
-    // Inicializaciones
+    // Inicializamos los periféricos y el reloj del sistema
     USER_SystemClock_Config();
     USER_GPIO_Init();
     USER_PWM_Init();
     USER_ADC_Init();
     USER_ADC_Calibration();
-    USER_USART2_Init();
+    USER_USART1_Init();
     USER_TIM2_Init();
     
     LCD_Init();
@@ -25,10 +25,10 @@ int main(void) {
 
     EngTrModel_initialize();
 
-    // Iniciar el ADC
+    // Iniciamos la conversión del ADC
     ADC1->CR2 |= ADC_CR2_ADON;
 
-    // --- TEST DIRECTO DE UART ---
+    // Transmitimos un mensaje de prueba inicial por UART
     const char *test_msg = "TEST_UART1_OK\r\n";
     for (int i = 0; test_msg[i] != '\0'; i++) {
         while (!(USART1->SR & USART_SR_TXE));
@@ -38,60 +38,60 @@ int main(void) {
     static uint8_t lcd_counter = 0;
 
     while (1) {
-        // Ejecución cada 40 ms
+        // Ejecutamos un ciclo de control cada 40 ms
         if (flag_40ms) {
             flag_40ms = 0;
 
-            // --- Leer Sensores (síncrono con el modelo) ---
+            // Leemos el acelerador mediante el ADC de forma síncrona con el modelo
             ADC1->CR2 |= (0x1UL << 22U); // SWSTART
             dataADC = USER_ADC_Read();
             EngTrModel_U.Throttle = ((double)dataADC / 4095.0) * 100.0;
 
-            // Leer Freno (PC13) - Pull-Up (Lógica negativa al presionar)
+            // Leemos el freno en el pin PC13 configurado con resistencia Pull-Up
             if (!(GPIOC->IDR & GPIO_IDR_IDR13)) {
-                EngTrModel_U.BrakeTorque = 15000.0; // Torque de frenado fuerte
+                EngTrModel_U.BrakeTorque = 15000.0; // Aplicamos un frenado fuerte
             } else {
                 EngTrModel_U.BrakeTorque = 0.0;
             }
 
-            // --- Avanzar el paso del modelo ---
+            // Avanzamos un paso en el modelo de transmisión automática
             EngTrModel_step();
 
-            // --- Controlador de Ralentí (Idle) ---
-            // Evita que el motor caiga por debajo de 800 RPM y que el vehículo retroceda
-            if (EngTrModel_DW.DiscreteTimeIntegrator_DSTATE < 100.0) {
-                EngTrModel_DW.DiscreteTimeIntegrator_DSTATE = 100.0;
+            
+            // Esto evita que el motor caiga por debajo de 1 RPM y que el vehículo retroceda
+            if (EngTrModel_DW.DiscreteTimeIntegrator_DSTATE < 1.0) {
+                EngTrModel_DW.DiscreteTimeIntegrator_DSTATE = 1.0;
             }
             if (EngTrModel_DW.WheelSpeed_DSTATE < 0.0) {
                 EngTrModel_DW.WheelSpeed_DSTATE = 0.0;
             }
 
-            // Topar la velocidad del vehículo a 120 mph
+            // Topamos la velocidad máxima del vehículo a 120 mph
             if (EngTrModel_Y.VehicleSpeed > 120.0) {
                 EngTrModel_Y.VehicleSpeed = 120.0;
             }
 
-            // --- Escalar Velocidad para PWM de LEDs ---
+            // Escalamos la velocidad para modular el PWM de los LEDs
             double v_speed = EngTrModel_Y.VehicleSpeed;
             if (v_speed < 0.0) v_speed = 0.0;
 
-            // Velocidad entre 0-120 mph para rango 0-4095
+            // Mapeamos la velocidad de 0-120 al rango de resolución del PWM (0-4095)
             uint32_t ccr_val = (uint32_t)(v_speed * (4095.0 / 120.0));
             if (ccr_val > 4095) ccr_val = 4095;
 
-            // Aplicar PWM a los 4 canales
+            // Aplicamos la señal PWM a los 4 canales configurados
             TIM3->CCR1 = ccr_val;
             TIM3->CCR2 = ccr_val;
             TIM3->CCR3 = ccr_val;
             TIM3->CCR4 = ccr_val;
 
-            // --- Actualizar LCD cada 200 ms (cada 5 ticks de 40 ms) ---
+            // Actualizamos los datos en el display LCD cada 200 ms 
             lcd_counter++;
             if (lcd_counter >= 5) {
                 lcd_counter = 0;
                 char lcd_buf[17];
 
-                // Línea 1: A:<Throttle> V:<VehicleSpeed> G:<Gear>
+                // Línea 1 A:<Acelerador> V:<VelocidadVehiculo> G:<Marcha>
                 LCD_Set_Cursor(1, 1);
                 sprintf(lcd_buf, "A:%-3d V:%-3d G:%-1d", 
                         (int)EngTrModel_U.Throttle, 
@@ -99,13 +99,14 @@ int main(void) {
                         (int)EngTrModel_Y.Gear);
                 LCD_Put_Str(lcd_buf);
 
-                // Línea 2: RPM:<EngineSpeed>
+                // Línea 2 RPM:<VelocidadMotor>
                 LCD_Set_Cursor(2, 1);
                 sprintf(lcd_buf, "RPM:%-4d        ", (int)EngTrModel_Y.EngineSpeed);
                 LCD_Put_Str(lcd_buf);
             }
 
-            // --- Transmitir por UART1 al ESP32 (cada 40 ms) ---
+            // Transmitimos los datos por UART1 hacia la ESP32 (cada 40 ms)
+            // Utilizamos enteros fijos para evitar errores de compilación con flotantes
             {
                 char uart_buf[32];
                 int rpm   = (int)EngTrModel_Y.EngineSpeed;
@@ -127,61 +128,62 @@ int main(void) {
 // Manejador de la Interrupción del TIM2
 void TIM2_IRQHandler(void) {
     if (TIM2->SR & TIM_SR_UIF) {
-        TIM2->SR &= ~TIM_SR_UIF; // Limpiar bandera
+        TIM2->SR &= ~TIM_SR_UIF; // Limpiamos la bandera de interrupción
         flag_40ms = 1;
     }
 }
 
-// Inicialización del Timer 2 para 40ms
+// Inicializamos el Timer 2 para generar una interrupción cada 40 ms
 void USER_TIM2_Init(void) {
     RCC->APB1ENR |= RCC_APB1ENR_TIM2EN;
 
-    // Prescaler: Frecuencia Timer = 64MHz. 64000 -> 1 ms por tick
+    // Configuramos el prescaler asumiendo una frecuencia de 64 MHz
     TIM2->PSC = 64000 - 1;
-    // Auto-reload para 40 ms
+    
+    // Configuramos el auto-reload para alcanzar los 40 ms
     TIM2->ARR = 40 - 1;
 
-    // Activar interrupción
+    // Activamos la interrupción por actualización
     TIM2->DIER |= TIM_DIER_UIE;
 
-    // Habilitar en NVIC
+    // Habilitamos la interrupción en el controlador NVIC
     NVIC_EnableIRQ(TIM2_IRQn);
 
-    // Arrancar timer
+    // Arrancamos el temporizador
     TIM2->CR1 |= TIM_CR1_CEN;
 }
 
 // Funciones de Configuración Base
 void USER_SystemClock_Config(void) {
+    // Configuramos el PLL para multiplicar el reloj a 64 MHz
     RCC->CR |= (0x1UL << 16U);
     while (!(RCC->CR & (0x1UL << 17U))); 
     RCC->CFGR &= ~((0xFUL << 18U) | (0x1UL << 16U));
-    RCC->CFGR |= (0x6UL << 18U) | (0x1UL << 16U); // PLLMUL x8 = 64MHz
+    RCC->CFGR |= (0x6UL << 18U) | (0x1UL << 16U); 
     RCC->CR |= (0x1UL << 24U);
     while (!(RCC->CR & (0x1UL << 25U))); 
     FLASH->ACR &= ~(0x7UL << 0U);
     FLASH->ACR |= (0x2UL << 0U);
     RCC->CFGR &= ~(0x3UL << 0U);
-    RCC->CFGR |= (0x2UL << 0U); // SW PLL
+    RCC->CFGR |= (0x2UL << 0U);
     while ((RCC->CFGR & (0x3UL << 2U)) != (0x2UL << 2U));
     
-    // APB1 Prescaler /2 para no exceder 36MHz (quedará a 32MHz)
-    // Nota: El reloj de los timers en APB1 se multiplica por 2 (queda en 64MHz)
+    
     RCC->CFGR &= ~(0x7UL << 8U);
     RCC->CFGR |=  (0x4UL << 8U); 
 }
 
 void USER_GPIO_Init(void)
 {
-    // Habilitar reloj para GPIOC (PC13 Freno) y GPIOA (PA0 Potenciómetro)
+    // Habilitamos el reloj para GPIOC 
     RCC->APB2ENR |= RCC_APB2ENR_IOPCEN | RCC_APB2ENR_IOPAEN;
 
-    // PC13 como Input with Pull-up
+    // Configuramos el pin PC13 como entrada con resistencia Pull-Up
     GPIOC->CRH &= ~(GPIO_CRH_MODE13 | GPIO_CRH_CNF13);
-    GPIOC->CRH |= GPIO_CRH_CNF13_1; // Input with pull-up/down
-    GPIOC->ODR |= GPIO_ODR_ODR13;   // Pull-up
+    GPIOC->CRH |= GPIO_CRH_CNF13_1; 
+    GPIOC->ODR |= GPIO_ODR_ODR13;   
 
-    // PA0 como Analog Input
+    // Configuramos el pin PA0 como entrada analógica
     GPIOA->CRL &= ~(GPIO_CRL_MODE0 | GPIO_CRL_CNF0);
 }
 
@@ -189,21 +191,17 @@ void USER_PWM_Init(void)
 {
     RCC->APB2ENR |= RCC_APB2ENR_IOPBEN | RCC_APB2ENR_AFIOEN;
     RCC->APB1ENR |= RCC_APB1ENR_TIM3EN;
-
-    /* PA6 TIM3_CH1, PA7 TIM3_CH2 */
+   
     GPIOA->CRL &= ~(0xFUL << 24U | 0xFUL << 28U);
     GPIOA->CRL |=  (0xBUL << 24U | 0xBUL << 28U);
 
-    /* PB0 TIM3_CH3, PB1 TIM3_CH4 */
     GPIOB->CRL &= ~(0xFUL << 0U | 0xFUL << 4U);
     GPIOB->CRL |=  (0xBUL << 0U | 0xBUL << 4U);
 
-    /* Prescaler */
     TIM3->PSC = 8 - 1;
-    /* PWM resolution (0 - 4095) */
+
     TIM3->ARR = 4095;
 
-    /* PWM mode CH1-CH4 */
     TIM3->CCMR1 &= ~(0xFUL << 4U | 0xFUL << 12U);
     TIM3->CCMR1 |= (0x6UL << 4U | 0x6UL << 12U);
     TIM3->CCMR2 &= ~(0xFUL << 4U | 0xFUL << 12U);
