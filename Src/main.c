@@ -12,6 +12,7 @@ int main(void) {
     // Inicializamos los periféricos y el reloj del sistema
     USER_SystemClock_Config();
     USER_GPIO_Init();
+    USER_Motor_Init();
     USER_PWM_Init();
     USER_ADC_Init();
     USER_ADC_Calibration();
@@ -24,6 +25,9 @@ int main(void) {
     LCD_Put_Str("Tractor Reto");
 
     EngTrModel_initialize();
+
+    // Fijamos la direccion de los motores hacia adelante
+    USER_Motor_Forward();
 
     // Iniciamos la conversión del ADC
     ADC1->CR2 |= ADC_CR2_ADON;
@@ -75,9 +79,9 @@ int main(void) {
             double v_speed = EngTrModel_Y.VehicleSpeed;
             if (v_speed < 0.0) v_speed = 0.0;
 
-            // Mapeamos la velocidad de 0-120 al rango de resolución del PWM (0-4095)
-            uint32_t ccr_val = (uint32_t)(v_speed * (4095.0 / 120.0));
-            if (ccr_val > 4095) ccr_val = 4095;
+            // Mapeamos la velocidad de 0-120 al rango de resolución del PWM (0-1000)
+            uint32_t ccr_val = (uint32_t)(v_speed * (1000.0 / 120.0));
+            if (ccr_val > 1000) ccr_val = 1000;
 
             // Aplicamos la señal PWM a los 4 canales configurados
             TIM3->CCR1 = ccr_val;
@@ -200,7 +204,7 @@ void USER_PWM_Init(void)
 
     TIM3->PSC = 8 - 1;
 
-    TIM3->ARR = 4095;
+    TIM3->ARR = 1000;
 
     TIM3->CCMR1 &= ~(0xFUL << 4U | 0xFUL << 12U);
     TIM3->CCMR1 |= (0x6UL << 4U | 0x6UL << 12U);
@@ -245,4 +249,62 @@ uint16_t USER_ADC_Read(void)
     while(!(ADC1->SR & ADC_SR_EOC));
     ADC1->SR &= ~ADC_SR_EOC;
     return (uint16_t)ADC1->DR;
+}
+
+// ============================================================
+// MOTOR CONTROL (L298N) - Pines de direccion
+// ============================================================
+
+void USER_Motor_Init(void)
+{
+    // Habilitamos reloj GPIOB (por si no esta habilitado aun)
+    RCC->APB2ENR |= RCC_APB2ENR_IOPBEN;
+
+    // PB5 OUTPUT (Motor 1 IN1)
+    GPIOB->CRL &= ~(0xFUL << 20U);
+    GPIOB->CRL |=  (0x1UL << 20U);
+
+    // PB6 OUTPUT (Motor 1 IN2)
+    GPIOB->CRL &= ~(0xFUL << 24U);
+    GPIOB->CRL |=  (0x1UL << 24U);
+
+    // PB7 OUTPUT (Motor 2 IN1)
+    GPIOB->CRL &= ~(0xFUL << 28U);
+    GPIOB->CRL |=  (0x1UL << 28U);
+
+    // PB8 OUTPUT (Motor 2 IN2)
+    GPIOB->CRH &= ~(0xFUL << 0U);
+    GPIOB->CRH |=  (0x1UL << 0U);
+
+    // PB10 OUTPUT (Motor 4 IN1)
+    GPIOB->CRH &= ~(0xFUL << 8U);
+    GPIOB->CRH |=  (0x1UL << 8U);
+
+    // PB11 OUTPUT (Motor 4 IN2)
+    GPIOB->CRH &= ~(0xFUL << 12U);
+    GPIOB->CRH |=  (0x1UL << 12U);
+
+    // PB12 OUTPUT (Motor 3 IN1 - corregido JTAG)
+    GPIOB->CRH &= ~(0xFUL << 16U);
+    GPIOB->CRH |=  (0x1UL << 16U);
+
+    // PB13 OUTPUT (Motor 3 IN2 - corregido JTAG)
+    GPIOB->CRH &= ~(0xFUL << 20U);
+    GPIOB->CRH |=  (0x1UL << 20U);
+}
+
+void USER_Motor_Forward(void)
+{
+    GPIOB->BSRR = (0x1UL << 5U);   GPIOB->BRR = (0x1UL << 6U);   // Motor 1
+    GPIOB->BSRR = (0x1UL << 7U);   GPIOB->BRR = (0x1UL << 8U);   // Motor 2
+    GPIOB->BSRR = (0x1UL << 12U);  GPIOB->BRR = (0x1UL << 13U);  // Motor 3
+    GPIOB->BSRR = (0x1UL << 10U);  GPIOB->BRR = (0x1UL << 11U);  // Motor 4
+}
+
+void USER_Motor_Stop(void)
+{
+    GPIOB->BRR = (0x1UL << 5U)  | (0x1UL << 6U)  |
+                 (0x1UL << 7U)  | (0x1UL << 8U)  |
+                 (0x1UL << 10U) | (0x1UL << 11U) |
+                 (0x1UL << 12U) | (0x1UL << 13U);
 }

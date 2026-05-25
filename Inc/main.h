@@ -231,5 +231,8 @@ void USER_ADC_Calibration(void);
 uint16_t USER_ADC_Read(void);
 void USER_PWM_Init(void);
 void USER_TIM2_Init(void);
+void USER_Motor_Init(void);
+void USER_Motor_Forward(void);
+void USER_Motor_Stop(void);
 
 #endif /* MAIN_H */
