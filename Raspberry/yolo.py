@@ -22,7 +22,7 @@ url = 'http://192.168.137.200/capture'
 INFLUX_TOKEN = "rfxAIyr4V8zIpavmvmWmZb7iTb0V57Idw6z-yck9jPy59pjN3i3p3i8QhukYLTtiIo5JYSdQwYrdMSXUoQeY-g=="
 INFLUX_ORG = "FacultadIng" 
 INFLUX_URL = "http://localhost:8086"
-INFLUX_BUCKET = "Reto_SoC"
+INFLUX_BUCKET = "telemetria_tractor"
 
 influx_client = InfluxDBClient(url=INFLUX_URL, token=INFLUX_TOKEN, org=INFLUX_ORG)
 write_api = influx_client.write_api(write_options=SYNCHRONOUS)
